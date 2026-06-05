@@ -210,14 +210,18 @@ def add_kconfig_checks(l: list[ChecklistObjType], arch: str) -> None:
     l += [KconfigCheck('self_protection', 'kspp', 'ZERO_CALL_USED_REGS', 'y')]
           # ZERO_CALL_USED_REGS is useless against ROP, however AMD claims that it makes
           # the BTC-RET attack harder (Branch Type Confusion for RET instructions, CVE-2022-29900)
-    cfi_clang_is_set = KconfigCheck('self_protection', 'kspp', 'CFI_CLANG', 'y')
-    cfi_clang_permissive_not_set = KconfigCheck('self_protection', 'kspp', 'CFI_PERMISSIVE', 'is not set')
+    cfi_is_set = OR(KconfigCheck('self_protection', 'kspp', 'CFI', 'y'),
+                    AND(KconfigCheck('self_protection', 'kspp', 'CFI_CLANG', 'y'),
+                        cc_is_clang))
+                    # CFI_CLANG was renamed to CFI in Linux v6.18.
+                    # The new CFI option doesn't depend on Clang,
+                    # since GCC is going to support kCFI as well.
+    cfi_permissive_not_set = KconfigCheck('self_protection', 'kspp', 'CFI_PERMISSIVE', 'is not set')
     l += [OR(KconfigCheck('self_protection', 'kspp', 'DEBUG_CREDENTIALS', 'y'),
              VersionCheck((6, 6, 8)))]  # DEBUG_CREDENTIALS was dropped in v6.6.8
     l += [OR(KconfigCheck('self_protection', 'kspp', 'DEBUG_NOTIFIERS', 'y'),
-             AND(cfi_clang_is_set,
-                 cfi_clang_permissive_not_set,
-                 cc_is_clang))]
+             AND(cfi_permissive_not_set,
+                 cfi_is_set))]
     kfence_is_set = KconfigCheck('self_protection', 'kspp', 'KFENCE', 'y')
     l += [kfence_is_set]
     l += [AND(KconfigCheck('self_protection', 'kspp', 'KFENCE_SAMPLE_INTERVAL', '100'),
@@ -304,11 +308,9 @@ def add_kconfig_checks(l: list[ChecklistObjType], arch: str) -> None:
     if arch in {'ARM64', 'ARM', 'RISCV'}:
         l += [KconfigCheck('self_protection', 'kspp', 'WERROR', 'y')]
     if arch in {'X86_64', 'ARM64'}:
-        l += [AND(cfi_clang_is_set,
-                  cc_is_clang)]
-        l += [AND(cfi_clang_permissive_not_set,
-                  cfi_clang_is_set,
-                  cc_is_clang)]
+        l += [cfi_is_set]
+        l += [AND(cfi_permissive_not_set,
+                  cfi_is_set)]
     if arch in {'X86_64', 'X86_32'}:
         l += [KconfigCheck('self_protection', 'kspp', 'IOMMU_DEFAULT_DMA_STRICT', 'y')]
         l += [KconfigCheck('self_protection', 'kspp', 'IOMMU_DEFAULT_DMA_LAZY', 'is not set')]
